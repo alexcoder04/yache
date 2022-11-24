@@ -8,14 +8,17 @@ type Item struct {
 }
 
 type Store struct {
-	Timeout int64
-	Data    map[string]Item
+	Timeout          int64
+	Autoflush        bool
+	AutoflushStarted bool
+	Data             map[string]Item
 }
 
-func NewStore(timeout int64) Store {
+func NewStore(timeout int64, autoflush bool) Store {
 	return Store{
-		Timeout: timeout,
-		Data:    map[string]Item{},
+		Timeout:   timeout,
+		Autoflush: autoflush,
+		Data:      map[string]Item{},
 	}
 }
 
@@ -23,6 +26,15 @@ func (s *Store) Set(key string, val any) {
 	s.Data[key] = Item{
 		Expires: time.Now().Unix() + s.Timeout,
 		Value:   val,
+	}
+	if !s.AutoflushStarted {
+		go func() {
+			for {
+				time.Sleep(time.Second * time.Duration(s.Timeout+1))
+				s.Flush()
+			}
+		}()
+		s.AutoflushStarted = true
 	}
 }
 
@@ -35,4 +47,12 @@ func (s *Store) Get(key string) any {
 		return val
 	}
 	return nil
+}
+
+func (s *Store) Flush() {
+	for key := range s.Data {
+		if time.Now().Unix() > s.Data[key].Expires {
+			delete(s.Data, key)
+		}
+	}
 }
